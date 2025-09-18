@@ -3,7 +3,6 @@ import nodemailer from 'nodemailer';
 
 export async function POST(req: Request) {
   try {
-    // 1) basic guards
     const contentType = req.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       return NextResponse.json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
@@ -14,32 +13,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Invalid email' }, { status: 400 });
     }
 
-    // 2) collect some context
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
     const ua = req.headers.get('user-agent') || '';
     const source = 'splitsub.co';
 
-    // 3) fan-out: write to Google Sheet via Apps Script Web App
+    // --- Sheets webhook
     const sheetsUrl = process.env.SHEETS_WEBHOOK_URL;
     const sheetsSecret = process.env.SHEETS_SECRET;
-    if (!sheetsUrl || !sheetsSecret) {
-      // Still allow flow, but let us know env is missing
-      console.warn('Missing SHEETS_WEBHOOK_URL or SHEETS_SECRET');
-    } else {
-      const resp = await fetch(sheetsUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source, ip, userAgent: ua, secret: sheetsSecret }),
-      });
+    let sheetsStatus: number | null = null;
+    let sheetsText: string | null = null;
 
-      // If Apps Script returns non-2xx, log it (don’t fail the user UX)
-      if (!resp.ok) {
-        const txt = await resp.text().catch(() => '');
-        console.error('Sheets webhook error', resp.status, txt);
+    if (!sheetsUrl || !sheetsSecret) {
+      console.warn('Sheets webhook missing env vars (SHEETS_WEBHOOK_URL / SHEETS_SECRET).');
+    } else {
+      try {
+        const resp = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, source, ip, userAgent: ua, secret: sheetsSecret }),
+        });
+        sheetsStatus = resp.status;
+        // Apps Script often returns 200 with a JSON body; capture it for debugging
+        sheetsText = await resp.text();
+        console.log('Sheets webhook result:', sheetsStatus, sheetsText);
+      } catch (e: any) {
+        console.error('Sheets webhook fetch failed:', e?.message || e);
       }
     }
 
-    // 4) optional: send you an email notification using Namecheap SMTP
+    // --- Optional: email notification (only if SMTP vars exist)
     const host = process.env.SMTP_HOST;
     const port = Number(process.env.SMTP_PORT || 465);
     const secure = port === 465;
@@ -59,12 +61,14 @@ export async function POST(req: Request) {
         });
       } catch (mailErr: any) {
         console.error('SMTP sendMail failed:', mailErr?.message || mailErr);
-        // don’t block success for user if mail fails
       }
     }
 
-    // 5) success response to client
-    return NextResponse.json({ ok: true });
+    // return a small hint to help us debug without exposing secrets
+    return NextResponse.json({
+      ok: true,
+      _sheetHint: typeof sheetsStatus === 'number' ? `sheets:${sheetsStatus}` : 'sheets:skipped',
+    });
   } catch (err: any) {
     console.error('subscribe error', err?.message || err);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });
