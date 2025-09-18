@@ -166,7 +166,7 @@ export default function Home() {
             <div style={{ fontSize: 18 }}>SplitSub</div>
             <span className="pill">Early Access</span>
           </div>
-          <a href="#waitlist" className="pill">Join waitlist</a>
+          <a href="#waitlist" className="pill">support@splitsub.co</a>
         </nav>
 
         {/* Hero */}
