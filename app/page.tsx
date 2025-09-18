@@ -71,6 +71,8 @@ export default function Home() {
         <li>Safe payments (escrow)</li>
         <li>Refunds if access isn’t provided</li>
         <li>Launching in India first</li>
+        <li>Join the waitlist to get early access</li>    
+        <li>Questions? Email <a href="mailto:support@splitsub.co">  
       </ul>
 
       <footer style={{marginTop:48, fontSize:14, opacity:.7}}>
